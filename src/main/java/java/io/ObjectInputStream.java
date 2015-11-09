@@ -40,6 +40,10 @@ import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import static java.io.ObjectStreamClass.processQueue;
 import sun.reflect.misc.ReflectUtil;
 
@@ -215,6 +219,16 @@ public class ObjectInputStream
     /** table mapping primitive type names to corresponding class objects */
     private static final HashMap<String, Class<?>> primClasses
             = new HashMap<>(8, 1.0F);
+
+    /** Set of blacklisted class name patterns. */
+    private static final java.util.Set<Pattern> blacklistPatterns;
+
+    /** Set of whitelisted class name patterns. */
+    private static final java.util.Set<Pattern> whitelistPatterns;
+
+    // JUL isn't ideal, but it's the out of the box one.
+    private static final Logger logger = Logger.getLogger("java.io.ObjectInputStream");
+
     static {
         primClasses.put("boolean", boolean.class);
         primClasses.put("byte", byte.class);
@@ -225,6 +239,24 @@ public class ObjectInputStream
         primClasses.put("float", float.class);
         primClasses.put("double", double.class);
         primClasses.put("void", void.class);
+
+        java.util.Set<Pattern> blackSet = new java.util.HashSet<>();
+        final String blacklistString = java.security.Security.getProperty("paranoid.serialization.blacklist");
+        final String[] blacklist = blacklistString.split(",\\s*");
+        for (String blackRegExp : blacklist) {
+            Pattern blackPattern = Pattern.compile(blackRegExp);
+            blackSet.add(blackPattern);
+        }
+        blacklistPatterns = java.util.Collections.unmodifiableSet(blackSet);
+
+        java.util.Set<Pattern> whiteSet = new java.util.HashSet<>();
+        final String whitelistString = java.security.Security.getProperty("paranoid.serialization.whitelist");
+        final String[] whitelist = whitelistString.split(",\\s*");
+        for (String whiteRegExp : whitelist) {
+            Pattern whitePattern = Pattern.compile(whiteRegExp);
+            whiteSet.add(whitePattern);
+        }
+        whitelistPatterns = java.util.Collections.unmodifiableSet(whiteSet);
     }
 
     private static class Caches {
@@ -361,7 +393,7 @@ public class ObjectInputStream
     public final Object readObject()
             throws IOException, ClassNotFoundException
     {
-        String enabled = java.security.Security.getProperty("java.io.enableObjectDeserialization");
+        String enabled = java.security.Security.getProperty("paranoid.serialization.enabled");
         if (! Boolean.parseBoolean(enabled)) {
             throw new InvalidClassException("Object deserialization is disabled!");
         }
@@ -627,7 +659,41 @@ public class ObjectInputStream
             throws IOException, ClassNotFoundException
     {
         String name = desc.getName();
+        logger.fine("resolveClass: resolving " + name);
+
+        // From https://github.com/ikkisoft/SerialKiller by luca.carettoni@ikkisoft.com
+
+        //Enforce blacklist
+        for (Pattern blackPattern : blacklistPatterns) {
+            Matcher blackMatcher = blackPattern.matcher(name);
+            if (blackMatcher.find()) {
+                logger.warning("resolveClass: rejecting blacklisted class " + name);
+                String msg = "[!] Blocked by blacklist '"
+                        + blackPattern.pattern() + "'. Match found for '" + name + "'";
+                throw new InvalidClassException(msg);
+            }
+        }
+
+        //Enforce whitelist if it exists.
+        if (! whitelistPatterns.isEmpty()) {
+            boolean safeClass = false;
+            for (Pattern whitePattern: whitelistPatterns) {
+                Matcher whiteMatcher = whitePattern.matcher(name);
+                if (whiteMatcher.find()) {
+                    safeClass = true;
+                    break;
+                }
+            }
+
+            if (!safeClass) {
+                logger.warning("resolveClass: rejecting class " + name + " not found in whitelist.");
+                String msg = "[!] Blocked by whitelist. No match found for '" + name + "'";
+                throw new InvalidClassException(msg);
+            }
+        }
+
         try {
+            logger.fine("resolveClass: accepting class " + name);
             return Class.forName(name, false, latestUserDefinedLoader());
         } catch (ClassNotFoundException ex) {
             Class<?> cl = primClasses.get(name);
