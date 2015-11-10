@@ -30,13 +30,11 @@ import java.lang.ref.ReferenceQueue;
 import java.lang.reflect.Array;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
-import java.security.AccessControlContext;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
-import java.security.PrivilegedActionException;
-import java.security.PrivilegedExceptionAction;
+import java.security.*;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -240,23 +238,23 @@ public class ObjectInputStream
         primClasses.put("double", double.class);
         primClasses.put("void", void.class);
 
-        java.util.Set<Pattern> blackSet = new java.util.HashSet<>();
-        final String blacklistString = java.security.Security.getProperty("paranoid.serialization.blacklist");
-        final String[] blacklist = blacklistString.split(",\\s*");
-        for (String blackRegExp : blacklist) {
-            Pattern blackPattern = Pattern.compile(blackRegExp);
-            blackSet.add(blackPattern);
-        }
-        blacklistPatterns = java.util.Collections.unmodifiableSet(blackSet);
+        final String blacklist = Security.getProperty("paranoid.serialization.blacklist");
+        blacklistPatterns = parsePatterns(blacklist);
 
-        java.util.Set<Pattern> whiteSet = new java.util.HashSet<>();
-        final String whitelistString = java.security.Security.getProperty("paranoid.serialization.whitelist");
-        final String[] whitelist = whitelistString.split(",\\s*");
-        for (String whiteRegExp : whitelist) {
-            Pattern whitePattern = Pattern.compile(whiteRegExp);
-            whiteSet.add(whitePattern);
+        final String whitelist = Security.getProperty("paranoid.serialization.whitelist");
+        whitelistPatterns = parsePatterns(whitelist);
+    }
+
+    private static Set<Pattern> parsePatterns(String listString) {
+        final Set<Pattern> listSet = new HashSet<>();
+        if (listString != null) {
+            final String[] regexArray = listString.split(",\\s*");
+            for (String regex : regexArray) {
+                Pattern whitePattern = Pattern.compile(regex);
+                listSet.add(whitePattern);
+            }
         }
-        whitelistPatterns = java.util.Collections.unmodifiableSet(whiteSet);
+        return java.util.Collections.unmodifiableSet(listSet);
     }
 
     private static class Caches {

@@ -1,6 +1,6 @@
 # Paranoid Java Serialization
 
-This is a proof of concept that takes `java.io.ObjectInputStream` and disables blind object deserialization.
+This is a proof of concept that hacks `java.io.ObjectInputStream` to provide JVM level control over Java object serialization.  Other solutions are user level -- they will work individually, but they don't change the behavior of internal libraries or application servers.  This will enforce behavior at the lowest level. 
 
 See [the blog post](https://tersesystems.com/2015/11/08/closing-the-open-door-of-java-object-serialization/) and the [original talk](https://frohoff.github.io/appseccali-marshalling-pickles/) for details.
 
@@ -12,13 +12,15 @@ mvn package
 
 ## Running
 
-Create a file `deserialization.properties`
+Create a file `deserialization.properties` in your local application directory:
 
 ```
-java.io.enableObjectDeserialization=true
+paranoid.serialization.enabled=true
+#paranoid.serialization.blacklist=com.evil.Nastygram
+#paranoid.serialization.whitelist=com.good.VirtualPackage
 ```
 
-And take the `paranoid-java-serialization-1.0-SNAPSHOT.jar` created from the package.
+And copy the `paranoid-java-serialization-1.0-SNAPSHOT.jar` created from the package to your local application.
 
 Then run Java with:
 
@@ -30,9 +32,11 @@ java \
 
 ## Code 
 
-The only code that's changed in ObjectInputStream (modulo OpenJDK vs Oracle JDK):
+Because this is a hack of ObjectInputStream, it's harder to see what's changed between this and the stock version.
 
-```
+First, you can disable serialization entirely:
+
+``` java
 public final Object readObject()
             throws IOException, ClassNotFoundException
 {
@@ -45,9 +49,111 @@ public final Object readObject()
 }
 ```
 
+Second: you can whitelist and blacklist based on class name:
+
+
+``` java
+/** Set of blacklisted class name patterns. */
+private static final java.util.Set<Pattern> blacklistPatterns;
+
+/** Set of whitelisted class name patterns. */
+private static final java.util.Set<Pattern> whitelistPatterns;
+
+// JUL isn't ideal, but it's the out of the box one.
+private static final Logger logger = Logger.getLogger("java.io.ObjectInputStream");
+
+static {
+    ...
+    
+    final String blacklist = Security.getProperty("paranoid.serialization.blacklist");
+    blacklistPatterns = parsePatterns(blacklist);
+
+    final String whitelist = Security.getProperty("paranoid.serialization.whitelist");
+    whitelistPatterns = parsePatterns(whitelist);
+}
+
+private static Set<Pattern> parsePatterns(String listString) {
+    final Set<Pattern> listSet = new HashSet<>();
+    if (listString != null) {
+        final String[] regexArray = listString.split(",\\s*");
+        for (String regex : regexArray) {
+            Pattern whitePattern = Pattern.compile(regex);
+            listSet.add(whitePattern);
+        }
+    }
+    return java.util.Collections.unmodifiableSet(listSet);
+}
+
+...
+
+protected Class<?> resolveClass(ObjectStreamClass desc)
+            throws IOException, ClassNotFoundException
+{
+    String name = desc.getName();
+    logger.fine("resolveClass: resolving " + name);
+
+    // From https://github.com/ikkisoft/SerialKiller by luca.carettoni@ikkisoft.com
+
+    //Enforce blacklist
+    for (Pattern blackPattern : blacklistPatterns) {
+        Matcher blackMatcher = blackPattern.matcher(name);
+        if (blackMatcher.find()) {
+            logger.warning("resolveClass: rejecting blacklisted class " + name);
+            String msg = "[!] Blocked by blacklist '"
+                    + blackPattern.pattern() + "'. Match found for '" + name + "'";
+            throw new InvalidClassException(msg);
+        }
+    }
+
+    //Enforce whitelist if it exists.
+    if (! whitelistPatterns.isEmpty()) {
+        boolean safeClass = false;
+        for (Pattern whitePattern: whitelistPatterns) {
+            Matcher whiteMatcher = whitePattern.matcher(name);
+            if (whiteMatcher.find()) {
+                safeClass = true;
+                break;
+            }
+        }
+
+        if (!safeClass) {
+            logger.warning("resolveClass: rejecting class " + name + " not found in whitelist.");
+            String msg = "[!] Blocked by whitelist. No match found for '" + name + "'";
+            throw new InvalidClassException(msg);
+        }
+    }
+
+    try {
+        logger.fine("resolveClass: accepting class " + name);
+        return Class.forName(name, false, latestUserDefinedLoader());
+    } catch (ClassNotFoundException ex) {
+        Class<?> cl = primClasses.get(name);
+        if (cl != null) {
+            return cl;
+        } else {
+            throw ex;
+        }
+    }
+}
+```
+
+## Logging
+
+If you are whitelisting, it can be helpful to run through the application first with a log of all the existing classes.
+
+While you can use configure `java.util.logging` through a properties file, it's probably better to use SLF4J and the [JUL to SLF4J bridge](http://mvnrepository.com/artifact/org.slf4j/jul-to-slf4j), after which you can use [Logback](http://mvnrepository.com/artifact/ch.qos.logback).  You will need to add the following as initialization:
+
+``` java
+LogManager.getLogManager().reset();
+SLF4JBridgeHandler.removeHandlersForRootLogger();
+SLF4JBridgeHandler.install();
+Logger.getLogger("global").setLevel(Level.FINEST);
+```
+
+
 ## Other libraries
 
-Take a look at https://github.com/ikkisoft/SerialKiller by [Luca Carettoni](mailto:luca.carettoni@ikkisoft.com).
+Take a look at https://github.com/ikkisoft/SerialKiller by [Luca Carettoni](mailto:luca.carettoni@ikkisoft.com) and [Invoker defender](https://github.com/kantega/invoker-defender/).
 
 ## License
 
