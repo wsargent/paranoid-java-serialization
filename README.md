@@ -1,6 +1,10 @@
 # Paranoid Java Serialization
 
-> **NOTE**: This project modifies the boot classpath, which is fine locally, but cannot be deployed as it contravenes section F of the Oracle Binary Code License Agreement.  If you see the java executable [Non-Standard Options](https://docs.oracle.com/javase/8/docs/technotes/tools/unix/java.html#BABHDABI), there is a note saying "Do not deploy applications that use this option to override a class in rt.jar because this violates the Java Runtime Environment binary code license."  
+> **LEGAL WARNING**: This project modifies the boot classpath, which is fine locally, but cannot be deployed as it contravenes section F of the Oracle Binary Code License Agreement.  If you see the java executable [Non-Standard Options](https://docs.oracle.com/javase/8/docs/technotes/tools/unix/java.html#BABHDABI), there is a note saying "Do not deploy applications that use this option to override a class in rt.jar because this violates the Java Runtime Environment binary code license."  
+>
+> **Please consider using an agent-based solution like [NotSoSerial](https://github.com/kantega/notsoserial) instead.**
+
+## Overview
 
 This is a proof of concept that hacks `java.io.ObjectInputStream` to provide JVM level control over Java object serialization.  Other solutions are user level -- they will work individually, but they don't change the behavior of internal libraries or application servers.  This will enforce behavior at the lowest level.
 
@@ -151,11 +155,6 @@ SLF4JBridgeHandler.removeHandlersForRootLogger();
 SLF4JBridgeHandler.install();
 Logger.getLogger("global").setLevel(Level.FINEST);
 ```
-
-
-## Other libraries
-
-Take a look at https://github.com/ikkisoft/SerialKiller by [Luca Carettoni](mailto:luca.carettoni@ikkisoft.com) and [Invoker defender](https://github.com/kantega/invoker-defender/).
 
 ## License
 
