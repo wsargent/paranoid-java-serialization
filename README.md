@@ -1,6 +1,6 @@
 # Paranoid Java Serialization
 
-> **NOTE**: This project modifies the boot classpath, which is fine locally, but cannot be deployed, per the "Oracle Binary Code License Agreement".  If you see the java executable [Non-Standard Options](https://docs.oracle.com/javase/8/docs/technotes/tools/unix/java.html#BABHDABI), there is a note saying "Do not deploy applications that use this option to override a class in rt.jar because this violates the Java Runtime Environment binary code license."
+> **NOTE**: This project modifies the boot classpath, which is fine locally, but cannot be deployed as it contravenes section F of the Oracle Binary Code License Agreement.  If you see the java executable [Non-Standard Options](https://docs.oracle.com/javase/8/docs/technotes/tools/unix/java.html#BABHDABI), there is a note saying "Do not deploy applications that use this option to override a class in rt.jar because this violates the Java Runtime Environment binary code license."  
 
 This is a proof of concept that hacks `java.io.ObjectInputStream` to provide JVM level control over Java object serialization.  Other solutions are user level -- they will work individually, but they don't change the behavior of internal libraries or application servers.  This will enforce behavior at the lowest level.
 
