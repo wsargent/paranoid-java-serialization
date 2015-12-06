@@ -1,11 +1,13 @@
 # Paranoid Java Serialization
 
-This is a proof of concept that hacks `java.io.ObjectInputStream` to provide JVM level control over Java object serialization.  Other solutions are user level -- they will work individually, but they don't change the behavior of internal libraries or application servers.  This will enforce behavior at the lowest level. 
+> **NOTE**: This project modifies the boot classpath, which is fine locally, but cannot be deployed, per the "Oracle Binary Code License Agreement".  If you see the java executable [Non-Standard Options](https://docs.oracle.com/javase/8/docs/technotes/tools/unix/java.html#BABHDABI), there is a note saying "Do not deploy applications that use this option to override a class in rt.jar because this violates the Java Runtime Environment binary code license."
+
+This is a proof of concept that hacks `java.io.ObjectInputStream` to provide JVM level control over Java object serialization.  Other solutions are user level -- they will work individually, but they don't change the behavior of internal libraries or application servers.  This will enforce behavior at the lowest level.
 
 See [the blog post](https://tersesystems.com/2015/11/08/closing-the-open-door-of-java-object-serialization/) and the [original talk](https://frohoff.github.io/appseccali-marshalling-pickles/) for details.
 
 ## Building
- 
+
 ```
 mvn package
 ```
@@ -30,7 +32,7 @@ java \
    -Djava.security.properties=deserialization.properties
 ```
 
-## Code 
+## Code
 
 Because this is a hack of ObjectInputStream, it's harder to see what's changed between this and the stock version.
 
@@ -64,7 +66,7 @@ private static final Logger logger = Logger.getLogger("java.io.ObjectInputStream
 
 static {
     ...
-    
+
     final String blacklist = Security.getProperty("paranoid.serialization.blacklist");
     blacklistPatterns = parsePatterns(blacklist);
 
